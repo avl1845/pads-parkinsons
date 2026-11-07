@@ -43,25 +43,30 @@ Run from the repo root, in order:
 
 Settings (target task, seed, test fraction) live in `src/config.py`.
 
-`src.train` options (used by `--final`; CV mode compares all feature sets):
+`src.train` options (comma-separated lists are compared in CV mode; `--final` takes one of each):
 
-- `--features base|base+asym|base+trem|all`: feature groups (default `all`).
-  `base` = movement magnitude stats, `trem` = tremor features, `asym` = left/right asymmetry.
-- `--rule fixed_0.5|youden|max_fpr`: how the decision cut-off is picked (default
-  `max_fpr`: most PD caught while false positive rate stays at or below 20%). Chosen with nested CV.
-- `--correction none|sex_feature|residualize|reweight`: optional sex-imbalance
-  correction (default `none`; none of them changed results in CV).
+- `--models logreg|svm|rf|hgb|logreg+rf|logreg+svm+rf`: classifier (`a+b` = average of both).
+- `--features base|base+asym|base+trem|all|quest|all+quest`: feature groups.
+  `all` = everything from the watch, `quest` = the 30-item symptom questionnaire.
+- `--rules fixed_0.5|youden|max_fpr`: how the decision cut-off is picked (`max_fpr`:
+  most PD caught while false positive rate stays at or below 20%). Chosen with nested CV.
+- `--correction none|sex_feature|residualize|reweight`: optional sex-imbalance correction.
+- `--repeats N`: also report ROC AUC mean/sd over N reshuffled CV runs.
 
-## Current results (nested 5-fold CV, train subjects only)
+## Current results (nested 5-fold CV, train subjects only, `max_fpr` cut-off)
 
-| Setup | ROC AUC | Balanced acc. | Sensitivity | FPR |
-|---|---|---|---|---|
-| always guess PD | – | 0.500 | 1.000 | 1.000 |
-| base features, cut-off 0.5 | 0.774 | 0.707 | 0.810 | 0.397 |
-| all features, `max_fpr` cut-off | 0.854 | 0.775 | 0.724 | 0.175 |
+| Model | Inputs | ROC AUC (5 repeats) | Balanced acc. | Sensitivity | FPR |
+|---|---|---|---|---|---|
+| always guess PD | – | – | 0.500 | 1.000 | 1.000 |
+| logreg | watch | 0.833 ± 0.012 | 0.775 | 0.724 | 0.175 |
+| rf | watch | 0.863 ± 0.009 | 0.769 | 0.760 | 0.222 |
+| **logreg+rf** | **watch** | 0.852 ± 0.012 | **0.797** | 0.769 | **0.175** |
+| rf | questionnaire | 0.937 ± 0.008 | 0.847 | 0.900 | 0.206 |
+| **rf** | **watch + questionnaire** | **0.946 ± 0.007** | **0.870** | 0.914 | **0.175** |
 
-Works within each sex (AUC 0.81 women / 0.85 men). Only 63 healthy subjects in
-train, so FPR moves about 1.6 points per person. Test set not yet scored.
+Both models hold up within each sex, age group and disease duration
+(`python -m src.check_confounds --model rf --features all+quest`). Only 63 healthy
+subjects in train, so FPR moves about 1.6 points per person. Test set not yet scored.
 
 ## Ground rules
 
@@ -81,7 +86,7 @@ src/
   features.py  per task/wrist/sensor signal features
   split.py     subject-level stratified train/test split
   train.py     model, threshold rules, nested CV and final test evaluation
-  check_confounds.py  does the model just detect sex/age?
+  check_confounds.py  does the model just detect sex/age? early vs late PD?
 splits/        shared train/test subject IDs
 notebooks/     exploration
 results/       metrics (gitignored)

@@ -40,3 +40,13 @@ N_CHANNELS = len(TASKS) * len(WRISTS) * len(SENSORS) * len(AXES)  # 132
 # Demographic column added to the feature table. Not a movement feature: only the
 # sex-correction variants in train.py use it.
 SEX_COL = "demo__male"
+
+# The 30 yes/no non-motor symptom questions (PDNMS), in file order (PADS Table 1).
+QUESTIONS = [
+    "dribbling", "taste_smell", "swallowing", "vomiting", "constipation",
+    "bowel_incontinence", "bowel_incomplete", "urinary_urgency", "nocturia", "pain",
+    "weight_change", "remembering", "loss_of_interest", "hallucinations", "concentrating",
+    "sad_blues", "anxiety", "sex_drive", "sex_difficulty", "dizzy",
+    "falling", "daytime_sleepiness", "insomnia", "vivid_dreams", "acting_out_dreams",
+    "restless_legs", "swelling", "sweating", "double_vision", "delusions",
+]

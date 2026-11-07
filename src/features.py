@@ -19,10 +19,13 @@ Columns are prefixed with their feature group, so train.py can pick groups:
            base and tremor features: 0 = symmetric, log(2) = one side twice the
            other. PD usually starts on one side. 11 tasks x 2 sensors x 7 = 154.
 
+  quest__  the 30 yes/no non-motor symptom answers (1 = yes), e.g. constipation,
+           loss of smell, acting out dreams. Not watch data: the "app questionnaire".
+
   demo__male  1 = male, 0 = female. Not a movement feature; only used by the
            sex-correction variants in train.py.
 
-Ideas not yet included: questionnaire answers, bradykinesia/smoothness of the
+Ideas not yet included: bradykinesia/smoothness of the
 kinetic tasks, per-axis features.
 
 Usage:  python -m src.features      -> data/processed/features.csv
@@ -33,8 +36,8 @@ import pandas as pd
 from scipy.signal import welch
 from scipy.stats import entropy
 
-from src.config import PROCESSED_DIR, SAMPLING_RATE, SENSORS, SEX_COL, TASKS, WRISTS
-from src.load import load_movement, load_subjects
+from src.config import PROCESSED_DIR, QUESTIONS, SAMPLING_RATE, SENSORS, SEX_COL, TASKS, WRISTS
+from src.load import load_movement, load_questionnaire, load_subjects
 
 TREMOR_BAND = (3.0, 7.0)  # Hz, typical Parkinsonian rest tremor (4-6 Hz) with margin
 BROAD_BAND = (1.0, 15.0)  # Hz, range of voluntary + tremor movement
@@ -145,6 +148,9 @@ def build_feature_table() -> pd.DataFrame:
     feats = pd.DataFrame(rows)
     feats.insert(0, "id", subjects["id"].values)
     feats.insert(1, "y", subjects["y"].values)
+    answers = np.array([load_questionnaire(sid) for sid in subjects["id"]])
+    quest = pd.DataFrame(answers, columns=[f"quest__q{i:02d}_{q}" for i, q in enumerate(QUESTIONS, 1)])
+    feats = pd.concat([feats, quest], axis=1)
     feats[SEX_COL] = (subjects["gender"] == "male").astype(int).values
     return feats
 

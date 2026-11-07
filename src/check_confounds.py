@@ -11,8 +11,12 @@ Checks:
      keeps AUC within each sex and makes the false positive rate similar for
      healthy men and healthy women.
   4. Same within age groups, split at the median.
+  5. Early vs late disease: the pitch is about EARLY detection, but PADS patients
+     are already diagnosed (median ~6 years). Each PD duration group is scored
+     against all healthy subjects. If the model only catches long-standing PD,
+     sensitivity and AUC drop for the 0-3 year group.
 
-Usage:  python -m src.check_confounds [--features all|base|...] [--rule max_fpr|...]
+Usage:  python -m src.check_confounds [--model logreg|rf|logreg+rf|...] [--features all|...] [--rule max_fpr|...]
 """
 
 import argparse
@@ -24,7 +28,7 @@ from sklearn.metrics import roc_auc_score
 from src.config import SEX_COL
 from src.load import load_subjects
 from src.split import load_split
-from src.train import (CORRECTIONS, FEATURE_SETS, THRESHOLD_RULES, load_xy, metrics,
+from src.train import (CORRECTIONS, FEATURE_SETS, MODEL_CHOICES, THRESHOLD_RULES, load_xy, metrics,
                        nested_cv_predictions, oof_scores)
 
 SHOW = ["roc_auc", "balanced_accuracy", "sensitivity", "false_positive_rate"]
@@ -46,7 +50,9 @@ def counts(groups: pd.Series, y) -> str:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
+    parser.add_argument("--model", choices=MODEL_CHOICES, default="logreg")
     parser.add_argument("--features", choices=list(FEATURE_SETS), default="all")
+    parser.add_argument("--corrections", action="store_true", help="also compare sex corrections (slow)")
     parser.add_argument("--rule", choices=THRESHOLD_RULES, default="max_fpr")
     args = parser.parse_args()
 
@@ -58,17 +64,20 @@ def main() -> None:
 
     print(f"Train subjects by sex -- {counts(sex, y)}")
     print(f"\n1. Sex alone -> PD:            AUC {roc_auc_score(y, male):.3f}")
-    # Movement features only (never the sex column itself!), cross-validated.
+    # Model inputs only (never the sex column itself!), cross-validated.
     X_blind = X.copy()
     X_blind[SEX_COL] = 0  # PDModel("none") ignores it anyway; zeroed to make the point explicit
     sex_score = oof_scores(X_blind, male)
-    print(f"2. Movement features -> sex:   AUC {roc_auc_score(male, sex_score):.3f}")
+    print(f"2. Model inputs -> sex:        AUC {roc_auc_score(male, sex_score):.3f}")
 
-    print(f"\n3. PD model [{args.features} @ {args.rule}], nested CV, per sex correction:")
+    tag = f"{args.model} | {args.features} | {args.rule}"
+    print(f"\n3. PD model [{tag}], nested CV, within each sex:")
     rows = {}
-    for correction in CORRECTIONS:
-        score, pred, _ = nested_cv_predictions(X, y, args.rule, correction)
-        for group, r in by_group(sex, y, pred, score).items():
+    for correction in CORRECTIONS if args.corrections else ["none"]:
+        s, pr, _ = nested_cv_predictions(X, y, args.rule, correction, args.model)
+        if correction == "none":
+            score, pred = s, pr  # reused by checks 4 and 5
+        for group, r in by_group(sex, y, pr, s).items():
             rows[(correction, group)] = r
     table = pd.DataFrame(rows).T
     table.index.names = ["correction", "group"]
@@ -76,8 +85,21 @@ def main() -> None:
 
     older = pd.Series(np.where(info["age"] >= info["age"].median(), "older", "younger"), index=info.index)
     print(f"\n4. Within age groups (median {info['age'].median():.0f}; {counts(older, y)}), no correction:")
-    score, pred, _ = nested_cv_predictions(X, y, args.rule, "none")
     print(pd.DataFrame(by_group(older, y, pred, score)).T.round(3).to_string())
+
+    # Healthy subjects have age_at_diagnosis == age in the file, so only PD rows are binned.
+    years = (info["age"] - info["age_at_diagnosis"]).where(y == 1)
+    duration = pd.cut(years, [-1, 3, 8, np.inf], labels=["0-3 y", "4-8 y", "9+ y"])
+    healthy = y == 0
+    rows = {}
+    for group in duration.cat.categories:
+        in_group = (duration == group).to_numpy()
+        m = in_group | healthy
+        r = metrics(y[m], pred[m], score[m])
+        rows[f"PD {group} since diagnosis ({in_group.sum()}) vs healthy"] = {
+            "roc_auc": r["roc_auc"], "sensitivity": r["sensitivity"]}
+    print("\n5. By years since diagnosis (same predictions, no correction):")
+    print(pd.DataFrame(rows).T.round(3).to_string())
 
 
 if __name__ == "__main__":
