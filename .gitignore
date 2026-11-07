@@ -1,0 +1,17 @@
+# Dataset (CC BY-NC-SA 4.0, ~240 MB) -- download with `python -m src.download`
+data/
+
+# Generated outputs (keep the folder, not the contents)
+results/*
+!results/.gitkeep
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+
+# OS / editors
+.DS_Store
+.vscode/
+.idea/
