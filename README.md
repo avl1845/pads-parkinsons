@@ -42,7 +42,7 @@ Run from the repo root, in order:
 | 3. Split    | `python -m src.split` | `splits/<target>_{train,test}_ids.txt` (committed) |
 | 4. Train / CV | `python -m src.train` | `results/<target>_cv_metrics.json` |
 | 4b. Bias check | `python -m src.check_confounds` | printed: performance within sex / age groups |
-| 5. Test (once, at the end) | see [Final models](#final-models-fixed-before-the-test-set) | `results/<target>_test_<model>_<features>_<rule>_<correction>.json` |
+| 5. Test (once, done) | see [Test-set results](#test-set-results-scored-once-2026-11-07) | `results/<target>_test_<model>_<features>_<rule>_<correction>.json` |
 
 Settings (target task, seed, test fraction) live in `src/config.py`.
 
@@ -69,7 +69,7 @@ Settings (target task, seed, test fraction) live in `src/config.py`.
 
 Both models hold up within each sex, age group and disease duration
 (`python -m src.check_confounds --model rf --features all+quest`). Only 63 healthy
-subjects in train, so FPR moves about 1.6 points per person. Test set not yet scored.
+subjects in train, so FPR moves about 1.6 points per person.
 
 ## Final models (fixed before the test set)
 
@@ -92,11 +92,44 @@ expect the test FPR to vary by roughly ±10–15 points from chance alone.
 `--final` refuses to overwrite an existing test result, so a model cannot be
 quietly re-scored.
 
+## Test-set results (scored once, 2026-11-07)
+
+Both final models were scored exactly once on the 71 locked test subjects, with
+the settings above. Nothing was changed afterwards.
+
+| | Model 1: watch only | Model 2: watch + questionnaire |
+|---|---|---|
+| Cut-off (chosen on train) | 0.802 | 0.653 |
+| Balanced accuracy (KPI > 70%) | **0.784** — pass | **0.888** — pass |
+| False positive rate (KPI < 25%) | **0.250** (4/16) — on the limit, not below | **0.188** (3/16) — pass |
+| Sensitivity | 0.818 (45/55) | 0.964 (53/55) |
+| Specificity | 0.750 (12/16) | 0.812 (13/16) |
+| ROC AUC | 0.932 | 0.953 |
+| Accuracy | 0.803 | 0.930 |
+
+95% intervals (Clopper–Pearson for rates, 5000 stratified bootstrap resamples
+for balanced accuracy and AUC, `python -m src.test_intervals`):
+
+| | Model 1 | Model 2 |
+|---|---|---|
+| Balanced accuracy | 0.66–0.89 | 0.78–0.97 |
+| False positive rate | 0.07–0.52 | 0.04–0.46 |
+| ROC AUC | 0.86–0.98 | 0.89–1.00 |
+
+Test results agree with cross-validation (balanced accuracy 0.797 vs 0.784 and
+0.870 vs 0.888), so the models did not overfit to the train subjects.
+
+Caveat on sex: in the test set every false positive was a healthy man
+(Model 1: 4/9 men, 0/7 women; Model 2: 3/9 men, 0/7 women), and Model 1 caught
+fewer women with PD (11/17) than men (34/38). Cross-validation showed no sex
+effect and these groups are very small, but it should not be reported as
+"equal performance across sexes".
+
 ## Ground rules
 
 - **Split by subject.** Each person is in train *or* test, never both.
 - **The test set is locked.** Explore, tune and compare models with cross-validation
-  on the train subjects only. Run `--final` once the group has picked a model.
+  on the train subjects only. Both final models have been scored (see above).
 - **Preprocessing inside the pipeline.** Scaling/PCA are fit on training folds only
   (sklearn `Pipeline`), never on the full dataset.
 
@@ -111,6 +144,7 @@ src/
   split.py     subject-level stratified train/test split
   train.py     model, threshold rules, nested CV and final test evaluation
   check_confounds.py  does the model just detect sex/age? early vs late PD?
+  test_intervals.py   95% intervals + per-sex counts for the scored test results
 splits/        shared train/test subject IDs
 notebooks/     exploration
 results/       metrics (gitignored)
