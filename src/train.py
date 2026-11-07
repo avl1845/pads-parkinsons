@@ -315,6 +315,8 @@ def main() -> None:
     parser.add_argument("--repeats", type=int, default=0,
                         help="also report ROC AUC mean/sd over this many reshuffled CV runs")
     parser.add_argument("--sweep", action="store_true", help="print a threshold sweep (one combination)")
+    parser.add_argument("--force", action="store_true",
+                        help="with --final: overwrite an existing test result (normally refused)")
     args = parser.parse_args()
 
     train_ids, test_ids = load_split()
@@ -336,6 +338,11 @@ def main() -> None:
         if not single:
             raise SystemExit("--final needs exactly one --models, --features and --rules value")
         model, feature_set, rule = args.models[0], args.features[0], args.rules[0]
+        # One file per model, and no silent re-runs: the test set is meant to be scored once.
+        out = RESULTS_DIR / f"{TARGET}_test_{model}_{feature_set}_{rule}_{args.correction}.json"
+        if out.exists() and not args.force:
+            raise SystemExit(f"{out} already exists: this model was already scored on the test set. "
+                             "Use --force only if you really mean to re-run it.")
         X_train, y_train = load_xy(train_ids, feature_set)
         threshold = choose_threshold(y_train, oof_scores(X_train, y_train, args.correction, model), rule)
         fitted = build_model(model, args.correction).fit(X_train, y_train)
@@ -343,10 +350,13 @@ def main() -> None:
         score = fitted.predict_proba(X_test)[:, 1]
         pred = (score >= threshold).astype(int)
         name = f"{model} | {feature_set} | {rule} | correction={args.correction} (TEST)"
-        results = {name: {**metrics(y_test, pred, score), "threshold": threshold}}
+        tn, fp, fn, tp = confusion_matrix(y_test, pred, labels=[0, 1]).ravel()
+        counts = {"healthy_cleared": int(tn), "healthy_flagged": int(fp),
+                  "pd_missed": int(fn), "pd_caught": int(tp)}
+        results = {name: {**metrics(y_test, pred, score), "threshold": threshold, **counts}}
         print(f"Locked test set: {len(y_test)} subjects, threshold {threshold:.3f}")
-        print(pd.DataFrame(results).round(3).to_string())
-        out = RESULTS_DIR / f"{TARGET}_test_metrics.json"
+        print(pd.DataFrame({name: metrics(y_test, pred, score)}).round(3).to_string())
+        print(", ".join(f"{k}: {v}" for k, v in counts.items()))
 
     out.write_text(json.dumps(results, indent=2))
     print(f"\nsaved {out}")

@@ -22,8 +22,11 @@ subset (~240 MB) into `data/raw/`.
 
 ## Setup
 
+Use Python 3.12 so the pinned versions in `requirements.txt` install and the
+numbers match:
+
 ```bash
-python3 -m venv .venv
+python3.12 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 ```
@@ -39,7 +42,7 @@ Run from the repo root, in order:
 | 3. Split    | `python -m src.split` | `splits/<target>_{train,test}_ids.txt` (committed) |
 | 4. Train / CV | `python -m src.train` | `results/<target>_cv_metrics.json` |
 | 4b. Bias check | `python -m src.check_confounds` | printed: performance within sex / age groups |
-| 5. Test (once, at the end) | `python -m src.train --final` | `results/<target>_test_metrics.json` |
+| 5. Test (once, at the end) | see [Final models](#final-models-fixed-before-the-test-set) | `results/<target>_test_<model>_<features>_<rule>_<correction>.json` |
 
 Settings (target task, seed, test fraction) live in `src/config.py`.
 
@@ -67,6 +70,27 @@ Settings (target task, seed, test fraction) live in `src/config.py`.
 Both models hold up within each sex, age group and disease duration
 (`python -m src.check_confounds --model rf --features all+quest`). Only 63 healthy
 subjects in train, so FPR moves about 1.6 points per person. Test set not yet scored.
+
+## Final models (fixed before the test set)
+
+Chosen from the cross-validation results above, using train subjects only, and
+committed **before** the test set is scored. Each is scored on the test set
+exactly once and reported as-is: no re-tuning or swapping models afterwards.
+
+| | Model | Inputs | Cut-off rule | Command |
+|---|---|---|---|---|
+| 1. Watch only | `logreg+rf` | `all` (558 watch features) | `max_fpr` (FPR ≤ 20% on train) | `python -m src.train --final --models logreg+rf --features all --rules max_fpr` |
+| 2. Watch + questionnaire | `rf` | `all+quest` (558 + 30) | `max_fpr` | `python -m src.train --final --models rf --features all+quest --rules max_fpr` |
+
+Task: PD (label 1) vs healthy (label 0); the 114 "other movement disorder"
+subjects are excluded. Test set: 71 subjects (55 PD, 16 healthy), listed in `splits/`.
+
+Pass criteria (from the pitch KPIs): balanced accuracy > 70% and false positive
+rate < 25%. With 16 healthy test subjects each one is 6.25 points of FPR, so
+expect the test FPR to vary by roughly ±10–15 points from chance alone.
+
+`--final` refuses to overwrite an existing test result, so a model cannot be
+quietly re-scored.
 
 ## Ground rules
 
