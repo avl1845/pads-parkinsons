@@ -3,6 +3,9 @@
 Classify Parkinson's disease vs. healthy controls from smartwatch movement data
 (PADS dataset, PhysioNet). Proof of concept for a smartphone-based screening tool.
 
+**Poster supplement:** the screening, scale and cost calculations behind the poster are in
+[CALCULATIONS.md](CALCULATIONS.md).
+
 KPIs from the pitch: detection accuracy > 70%, false positive rate < 25%.
 Because PD subjects outnumber healthy ones ~3.5:1, plain accuracy is misleading
 (always guessing "PD" already scores ~78%), so we report balanced accuracy,
